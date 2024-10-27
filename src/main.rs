@@ -1,19 +1,15 @@
-use std::io;
-use rand::Rng;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use rand::Rng;
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{Stylize, Style},
+    style::{Color, Style, Stylize},
     symbols::border,
     text::{Line, Text},
-    widgets::{
-        Block, Paragraph, Widget,
-    },
+    widgets::{Block, Paragraph, Widget},
     DefaultTerminal, Frame,
 };
-
-
+use std::io;
 
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
@@ -40,16 +36,13 @@ pub struct Snake {
 
 impl Default for Snake {
     fn default() -> Self {
-        let mut rng = rand::thread_rng();
         Self {
-            body: vec![(rng.gen_range(0..168), rng.gen_range(0..15))],
-            head: "🟢".to_string(),
+            body: vec![(84 as u16, 7 as u16)],
+            head: "X".to_string(),
             length: 1,
         }
     }
 }
-
-
 
 #[derive(Debug)]
 pub struct Apple {
@@ -61,7 +54,7 @@ impl Default for Apple {
     fn default() -> Self {
         let mut rng = rand::thread_rng();
         Self {
-            position: (rng.gen_range(0..168), rng.gen_range(1..14)), // x and y are random
+            position: (rng.gen_range(0..167), rng.gen_range(1..14)), // x and y are random
             unit: "🍎".to_string(),
         }
     }
@@ -107,8 +100,6 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        self.eat_apple();
-
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
             KeyCode::Left => self.direction = (-1, 0),
@@ -117,13 +108,15 @@ impl App {
             KeyCode::Up => self.direction = (0, -1),
             _ => {}
         }
-
+        
         let (dx, dy) = self.direction;
-
-        self.snake.body.insert(0, (
+        self.snake.body.insert(0, self.snake.body[0].clone());
+        self.snake.body[0] = (
             (self.snake.body[0].0 as i16 + dx) as u16,
             (self.snake.body[0].1 as i16 + dy) as u16,
-        ));
+        );
+        self.eat_apple();
+
         while self.snake.body.len() > self.snake.length as usize {
             self.snake.body.pop();
         }
@@ -133,20 +126,14 @@ impl App {
         self.exit = true;
     }
 
-   fn eat_apple(&mut self) {
-    
-       if self.snake.body[0] == self.apple.position {
-           self.score += 1;
-           self.snake.length += 1;
-           self.snake.body.append(&mut vec![self.apple.position]);
-           self.apple = Apple::default();
-       
-       }
-   }
-
-  
+    fn eat_apple(&mut self) {
+        if self.snake.body[0] == self.apple.position {
+            self.score += 1;
+            self.snake.length += 1;
+            self.apple = Apple::default();
+        }
+    }
 }
-
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
@@ -162,8 +149,11 @@ impl Widget for &App {
             " Quit ".into(),
             "<Q> ".blue().bold(),
         ]);
-        let block = Block::bordered().title_top(" Score ".bold()).title_alignment(Alignment::Center)
-            .title_bottom(instructions).title_alignment(Alignment::Center)
+        let block = Block::bordered()
+            .title_top(" Score ".bold())
+            .title_alignment(Alignment::Center)
+            .title_bottom(instructions)
+            .title_alignment(Alignment::Center)
             .border_set(border::THICK);
 
         let score_text = Text::from(vec![Line::from(vec![
@@ -177,14 +167,26 @@ impl Widget for &App {
             .render(area, buf);
 
         // draw the snake
-        for p in self.snake.body.iter() {
-            buf.set_string(p.0 as u16, p.1 as u16, self.snake.head.clone(), Style::new());
-        // draw the apple
-        buf.set_string(self.apple.position.0 as u16, self.apple.position.1 as u16, &self.apple.unit, Style::new());
-    }
-      
-
-
+        for (i, p) in self.snake.body.iter().enumerate() {
+            let color: Color = match i {
+                0 => Color::Rgb(255, 0, 0),
+                _ if i % 2 == 0 => Color::Rgb(0, 192, 0),
+                _ => Color::Rgb(255, 128, 0),
+            };
+            buf.set_string(
+                p.0 as u16,
+                p.1 as u16,
+                self.snake.head.clone(),
+                Style::new().fg(color),
+            );
+            // draw the apple
+            buf.set_string(
+                self.apple.position.0 as u16,
+                self.apple.position.1 as u16,
+                &self.apple.unit,
+                Style::new(),
+            );
+        }
     }
 }
 
