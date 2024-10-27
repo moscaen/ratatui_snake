@@ -4,7 +4,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{Stylize,Color, Style},
+    style::{Stylize, Style},
     symbols::border,
     text::{Line, Text},
     widgets::{
@@ -27,51 +27,30 @@ pub struct App {
     score: u8,
     exit: bool,
     snake: Snake,
-    apple: Apple
+    apple: Apple,
+    direction: (i16, i16),
 }
 
 #[derive(Debug)]
 pub struct Snake {
-    position:  (u16, u16),
-    unit: String,
+    body: Vec<(u16, u16)>,
+    head: String,
+    length: u16,
 }
 
 impl Default for Snake {
     fn default() -> Self {
         let mut rng = rand::thread_rng();
         Self {
-            position: (rng.gen_range(0..168), rng.gen_range(0..15)), // x and y are random
-            unit: "🟩".to_string(),
+            body: vec![(rng.gen_range(0..168), rng.gen_range(0..15))],
+            head: "🟢".to_string(),
+            length: 1,
         }
     }
 }
 
 
-impl Snake{
-    fn move_right(&mut self) {
-        self.position.0 += 1;
-    }
 
-    fn move_left(&mut self) {
-        if self.position.0 == 0 {
-            return;
-        }
-        self.position.0  -= 1;
-
-    }
-    fn move_up(&mut self) {
-        if self.position.1 == 0 {
-            return;
-        }
-        self.position.1  -= 1;
-    }
-    fn move_down(&mut self) {
-        
-        self.position.1  += 1;
-    }
-
-    
-}
 #[derive(Debug)]
 pub struct Apple {
     position: (u16, u16), // (x, y) x is left and right, y is up and down. generated randomly
@@ -82,7 +61,7 @@ impl Default for Apple {
     fn default() -> Self {
         let mut rng = rand::thread_rng();
         Self {
-            position: (rng.gen_range(0..168), rng.gen_range(0..15)), // x and y are random
+            position: (rng.gen_range(0..168), rng.gen_range(1..14)), // x and y are random
             unit: "🍎".to_string(),
         }
     }
@@ -93,6 +72,7 @@ impl Default for App {
         Self {
             score: 0,
             exit: false,
+            direction: (1, 0),
             snake: Snake::default(),
             apple: Apple::default(),
         }
@@ -127,15 +107,26 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        self.eat_apple();
+
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
-            KeyCode::Left => self.snake.move_left(),
-            KeyCode::Right => self.snake.move_right(),
-            KeyCode::Down => self.snake.move_down(),
-            KeyCode::Up => self.snake.move_up(),
+            KeyCode::Left => self.direction = (-1, 0),
+            KeyCode::Right => self.direction = (1, 0),
+            KeyCode::Down => self.direction = (0, 1),
+            KeyCode::Up => self.direction = (0, -1),
             _ => {}
         }
-        self.eat_apple();
+
+        let (dx, dy) = self.direction;
+
+        self.snake.body.insert(0, (
+            (self.snake.body[0].0 as i16 + dx) as u16,
+            (self.snake.body[0].1 as i16 + dy) as u16,
+        ));
+        while self.snake.body.len() > self.snake.length as usize {
+            self.snake.body.pop();
+        }
     }
 
     fn exit(&mut self) {
@@ -143,10 +134,13 @@ impl App {
     }
 
    fn eat_apple(&mut self) {
-       if self.snake.position == self.apple.position {
+    
+       if self.snake.body[0] == self.apple.position {
            self.score += 1;
+           self.snake.length += 1;
+           self.snake.body.append(&mut vec![self.apple.position]);
            self.apple = Apple::default();
-           self.snake.unit += "🟩";
+       
        }
    }
 
@@ -170,7 +164,6 @@ impl Widget for &App {
         ]);
         let block = Block::bordered().title_top(" Score ".bold()).title_alignment(Alignment::Center)
             .title_bottom(instructions).title_alignment(Alignment::Center)
-          
             .border_set(border::THICK);
 
         let score_text = Text::from(vec![Line::from(vec![
@@ -183,12 +176,12 @@ impl Widget for &App {
             .block(block)
             .render(area, buf);
 
-        // draw the player
-        buf.set_string(self.snake.position.0 as u16, self.snake.position.1 as u16, &self.snake.unit, Style::new());
-
+        // draw the snake
+        for p in self.snake.body.iter() {
+            buf.set_string(p.0 as u16, p.1 as u16, self.snake.head.clone(), Style::new());
         // draw the apple
         buf.set_string(self.apple.position.0 as u16, self.apple.position.1 as u16, &self.apple.unit, Style::new());
-
+    }
       
 
 
@@ -203,7 +196,7 @@ mod tests {
     #[test]
     fn eat_apple() {
         let mut app = App::default();
-        app.snake.position = app.apple.position;
+        app.snake.body[0] = app.apple.position;
         app.eat_apple();
         assert_eq!(app.score, 1);
     }
